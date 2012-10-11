@@ -58,6 +58,7 @@ static char kAFResourceIdentifierObjectKey;
 #pragma mark -
 
 @interface AFIncrementalStore ()
+- (NSManagedObjectContext *)privateBackingManagedObjectContext;
 - (NSManagedObjectContext *)backingManagedObjectContext;
 - (NSManagedObjectID *)objectIDForEntity:(NSEntityDescription *)entity
                   withResourceIdentifier:(NSString *)resourceIdentifier;
@@ -87,6 +88,7 @@ static char kAFResourceIdentifierObjectKey;
     NSMutableDictionary *_registeredObjectIDsByResourceIdentifier;
     NSPersistentStoreCoordinator *_backingPersistentStoreCoordinator;
     NSManagedObjectContext *_backingManagedObjectContext;
+    NSManagedObjectContext *_privateBackingManagedObjectContext;
 }
 @synthesize HTTPClient = _HTTPClient;
 @synthesize backingPersistentStoreCoordinator = _backingPersistentStoreCoordinator;
@@ -171,15 +173,23 @@ static char kAFResourceIdentifierObjectKey;
     }
 }
 
+- (NSManagedObjectContext *)privateBackingManagedObjectContext {
+    if (!_privateBackingManagedObjectContext) {
+        _privateBackingManagedObjectContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+        _privateBackingManagedObjectContext.persistentStoreCoordinator = _backingPersistentStoreCoordinator;
+        _privateBackingManagedObjectContext.retainsRegisteredObjects = YES;
+    }
+    return _privateBackingManagedObjectContext;
+}
 - (NSManagedObjectContext *)backingManagedObjectContext {
     if (!_backingManagedObjectContext) {
         _backingManagedObjectContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
-        _backingManagedObjectContext.persistentStoreCoordinator = _backingPersistentStoreCoordinator;
-        _backingManagedObjectContext.retainsRegisteredObjects = YES;
+        _backingManagedObjectContext.parentContext = [self privateBackingManagedObjectContext];
     }
     
     return _backingManagedObjectContext;
 }
+
 
 - (NSManagedObjectID *)objectIDForEntity:(NSEntityDescription *)entity
                   withResourceIdentifier:(NSString *)resourceIdentifier {
@@ -248,7 +258,7 @@ static char kAFResourceIdentifierObjectKey;
                 representations = [NSArray arrayWithObject:representationOrArrayOfRepresentations];
             }
             
-            NSManagedObjectContext *childContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
+            NSManagedObjectContext *childContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
             childContext.parentContext = context;
             childContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy;
             
